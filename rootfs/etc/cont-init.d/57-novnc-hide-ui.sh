@@ -20,25 +20,97 @@ CUSTOM_CSS='/* noVNC Docker customizations: hide control bar and cursor */
 #noVNC_control_bar, #noVNC_control_bar_handle, #noVNC_control_bar_anchor {
     display: none !important;
 }
-#noVNC_container, #noVNC_screen, #noVNC_canvas, #noVNC_mouse_capture, html, body {
+
+html, body, #noVNC_container, #noVNC_screen, #noVNC_canvas, #noVNC_mouse_capture, #noVNC_container * {
     cursor: none !important;
 }
 
-/* noVNC Docker customizations: touch-friendly v3 */
-html, body, #noVNC_container, #noVNC_screen, #noVNC_canvas, #noVNC_mouse_capture {
-    touch-action: pan-x pan-y;
-    -ms-touch-action: pan-x pan-y;
-    overscroll-behavior: contain;
+/* noVNC Docker customizations: touch-friendly v4 */
+html, body, #noVNC_container, #noVNC_screen {
+    touch-action: pan-y !important;
+    -ms-touch-action: pan-y !important;
+    overscroll-behavior: auto !important;
     user-select: none;
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
 }
+
+#noVNC_screen {
+    overflow-y: auto !important;
+}
+
+#noVNC_canvas, #noVNC_mouse_capture {
+    touch-action: none !important;
+}
+
 #noVNC_container img, #noVNC_screen img, #noVNC_canvas img {
     -webkit-user-drag: none;
     user-drag: none;
     user-select: none;
     touch-action: manipulation;
 }
+'
+
+CUSTOM_JS='// noVNC Docker customizations: touch-friendly v4
+(function () {
+    const hideCursor = () => {
+        document.documentElement.style.setProperty("cursor", "none", "important");
+        document.body.style.setProperty("cursor", "none", "important");
+    };
+
+    const setTouchActions = () => {
+        const targets = [
+            document.documentElement,
+            document.body,
+            document.getElementById("noVNC_container"),
+            document.getElementById("noVNC_screen"),
+        ].filter(Boolean);
+
+        targets.forEach((el) => {
+            el.style.setProperty("touch-action", "pan-y", "important");
+            el.style.setProperty("-ms-touch-action", "pan-y", "important");
+            el.style.setProperty("overscroll-behavior", "auto", "important");
+        });
+
+        const screen = document.getElementById("noVNC_screen");
+        if (screen) {
+            screen.style.setProperty("overflow-y", "auto", "important");
+        }
+
+        const canvas = document.getElementById("noVNC_canvas");
+        if (canvas) {
+            canvas.style.setProperty("touch-action", "none", "important");
+        }
+    };
+
+    const lockViewportDrag = () => {
+        if (typeof UI !== "undefined" && UI) {
+            if (typeof UI.forceSetting === "function") {
+                UI.forceSetting("viewportDrag", false);
+                UI.forceSetting("view_clip", true);
+            }
+
+            if (UI.rfb) {
+                if (typeof UI.rfb.dragViewport !== "undefined") {
+                    UI.rfb.dragViewport = false;
+                }
+                if (typeof UI.rfb.clipViewport !== "undefined") {
+                    UI.rfb.clipViewport = true;
+                }
+            }
+        }
+    };
+
+    const apply = () => {
+        hideCursor();
+        setTouchActions();
+        lockViewportDrag();
+    };
+
+    document.addEventListener("DOMContentLoaded", apply);
+    window.addEventListener("load", apply);
+    setTimeout(apply, 500);
+})();
 '
 
 NOVNC_CSS_PATHS="$(
@@ -56,7 +128,7 @@ else
     for NOVNC_CSS_PATH in $NOVNC_CSS_PATHS; do
         echo "Using noVNC CSS at $NOVNC_CSS_PATH"
 
-        if grep -q "noVNC Docker customizations: touch-friendly v3" "$NOVNC_CSS_PATH"; then
+        if grep -q "noVNC Docker customizations: touch-friendly v4" "$NOVNC_CSS_PATH"; then
             echo "Already patched: $NOVNC_CSS_PATH"
             PATCHED=1
             continue
@@ -85,7 +157,7 @@ NOVNC_HTML_PATHS="$(
 add_inline_style() {
     HTML_PATH="$1"
 
-    if grep -q "noVNC Docker customizations: touch-friendly v3" "$HTML_PATH"; then
+    if grep -q "noVNC Docker customizations: touch-friendly v4" "$HTML_PATH"; then
         echo "Already patched HTML: $HTML_PATH"
         PATCHED=1
         return
@@ -93,10 +165,13 @@ add_inline_style() {
 
     TMP_STYLE="$(mktemp)"
     cat > "$TMP_STYLE" <<STYLE
-<!-- noVNC Docker customizations: touch-friendly v3 -->
+<!-- noVNC Docker customizations: touch-friendly v4 -->
 <style>
 $CUSTOM_CSS
 </style>
+<script>
+$CUSTOM_JS
+</script>
 STYLE
 
     if grep -q "</head>" "$HTML_PATH"; then
